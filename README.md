@@ -3,5 +3,7 @@
 # feature
 node /Node/index.js <name>
 
+--help
+
 
 
