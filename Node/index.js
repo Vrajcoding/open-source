@@ -1,6 +1,7 @@
 const { Command } = require("commander");
 const path = require('path');
 const fs = require('fs');
+const { Transform } = require('stream');
 
 const program = new Command();
 
@@ -9,73 +10,77 @@ program
     .description('A CLI to count words, lines, and characters in a file')
     .version('1.0.0')
     .argument('<filepath>', 'path to the file to be processed')
+    .option('-o, --output <description>', 'pipe the results to a specific file')
     .option('--json', "output in json format")
-    .action(async (filepath, options) => {
+    .action((filepath, options) => {
         const absolutePath = path.resolve(process.cwd(), filepath);
+        analyzeWithPipe(absolutePath, options);
+    });
 
-        if (!fs.existsSync(absolutePath)) {
-            console.error(`❌ Error: File not found at ${absolutePath}`);
-            process.exit(1);
-        }
+const analyzeWithPipe = (absolutePath, options) => {
+    const readStream = fs.createReadStream(absolutePath, { encoding: 'utf-8' });
+    let lines = 0;
+    let characters = 0;
+    let words = 0
+    let leftOver = "";
 
-        const readStream = fs.createReadStream(absolutePath, { encoding: 'utf8' });
+    const analyzer = new Transform({
+        transform(chunk, encoding, callback) {
+            characters += chunk.length;
 
-        // State trackers
-        let lines = 0;
-        let words = 0;
-        let chars = 0;
-        let inWord = false; // Tracks word boundaries across chunks
+            const data = leftOver + chunk;
+            const parts = data.split('\n');
 
-        try {
-            for await (const chunk of readStream) {
-                chars += chunk.length;
+            lines += parts.length - 1;
+            leftOver = parts.pop();
 
-                for (let i = 0; i < chunk.length; i++) {
-                    const char = chunk[i];
-
-                    if (char === '\n') {
-                        lines++;
-                    }
-
-                    // Regex to check for any whitespace (space, tab, newline, carriage return)
-                    const isWhitespace = /\s/.test(char);
-
-                    if (!isWhitespace && !inWord) {
-                        // We hit a non-whitespace character and weren't already in a word
-                        words++;
-                        inWord = true;
-                    } else if (isWhitespace) {
-                        // We hit whitespace, meaning the current word ended
-                        inWord = false;
-                    }
-                }
+            const completeText = parts.join("\n");
+            const wordArr = completeText.trim().split(/\s+/).filter(Boolean);
+            words += wordArr.length;
+            callback();
+        },
+        flush(callback) {
+            if (leftOver) {
+                lines += 1;
+                words += leftOver.trim().split(/\s+/).filter(Boolean).length;
             }
 
-            if (chars > 0 && lines === 0) lines = 1;
-            const results = {
-                [path.basename(absolutePath)]: {
-                    Lines: lines,
-                    Words: words,
-                    Characters: chars
-                }
-            };
+            const result = { lines, words, characters };
+            let output;
 
-            console.log('\n✅ Analysis Complete:\n');
-            const State = {
-                lines,
-                words,
-                chars
-            }
             if (options.json) {
-                console.log(JSON.stringify(State))
+                output = JSON.stringify(result, null, 2)
             } else {
-                console.table(results);
+                output = `Lines: ${lines}\nWords: ${words}\nCharacters: ${characters}`;
             }
 
-        } catch (error) {
-            console.error(`\n❌ Stream error: ${error.message}`);
-            process.exit(1);
+            this.push(output);
+            callback();
         }
     });
+
+    if (options.output) {
+        const outputPath = path.resolve(process.cwd(), options.output);
+        const writeStream = fs.createWriteStream(outputPath, { encoding: 'utf-8' });
+
+        readStream
+            .pipe(analyzer)
+            .pipe(writeStream)
+
+        writeStream.on("finish", () => {
+            console.log(`✅ Output written to ${outputPath}`);
+        });
+
+
+        writeStream.on("error", (err) => {
+            console.error("❌ Write error:", err.message);
+        })
+    } else {
+        readStream
+            .pipe(analyzer)
+            .pipe(process.stdout);
+    }
+}
+
 
 program.parse(process.argv);

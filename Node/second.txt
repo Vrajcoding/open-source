@@ -1,0 +1,5 @@
+{
+  "lines": 2,
+  "words": 6,
+  "characters": 32
+}
