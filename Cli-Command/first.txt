@@ -1,2 +1,5 @@
-hello world
-this is new country
+{
+  "lines": 5,
+  "words": 8,
+  "characters": 50
+}

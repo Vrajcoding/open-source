@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 const { Command } = require("commander");
 const path = require('path');
 const fs = require('fs');
@@ -6,12 +7,15 @@ const { Transform } = require('stream');
 const program = new Command();
 
 program
-    .name('file-analyzer')
+    .name('vraj')
     .description('A CLI to count words, lines, and characters in a file')
     .version('1.0.0')
     .argument('<filepath>', 'path to the file to be processed')
     .option('-o, --output <description>', 'pipe the results to a specific file')
     .option('--json', "output in json format")
+    .option('-l, --lines', "That give the lines in words")
+    .option('-w, --words', "That give the total words")
+    .option('-c, --chars', "That give the count of character in file")
     .action((filepath, options) => {
         const absolutePath = path.resolve(process.cwd(), filepath);
         analyzeWithPipe(absolutePath, options);
@@ -49,15 +53,32 @@ const analyzeWithPipe = (absolutePath, options) => {
             let output;
 
             if (options.json) {
-                output = JSON.stringify(result, null, 2)
+                output = JSON.stringify(result, null, 2);
+            } else if (options.lines) {
+                output = `Lines: ${lines}`;
+            } else if (options.words) {
+                output = `Words: ${words}`;
+            } else if (options.chars) {
+                output = `Characters: ${characters}`;
             } else {
-                output = `Lines: ${lines}\nWords: ${words}\nCharacters: ${characters}`;
+                output = `
+📄 File Analysis
+----------------
+Lines      : ${lines}
+Words      : ${words}
+Characters : ${characters}
+`;
             }
 
             this.push(output);
             callback();
         }
     });
+
+    readStream.on('error', () => {
+        console.error("❌ File not found or cannot be read");
+        process.exit(1);
+    })
 
     if (options.output) {
         const outputPath = path.resolve(process.cwd(), options.output);
@@ -70,7 +91,6 @@ const analyzeWithPipe = (absolutePath, options) => {
         writeStream.on("finish", () => {
             console.log(`✅ Output written to ${outputPath}`);
         });
-
 
         writeStream.on("error", (err) => {
             console.error("❌ Write error:", err.message);
