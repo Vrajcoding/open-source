@@ -27,9 +27,11 @@ const analyzeWithPipe = (absolutePath, options) => {
     let characters = 0;
     let words = 0
     let leftOver = "";
+    let message = "";
 
     const analyzer = new Transform({
         transform(chunk, encoding, callback) {
+            message += chunk;
             characters += chunk.length;
 
             const data = leftOver + chunk;
@@ -49,7 +51,7 @@ const analyzeWithPipe = (absolutePath, options) => {
                 words += leftOver.trim().split(/\s+/).filter(Boolean).length;
             }
 
-            const result = { lines, words, characters };
+            const result = { lines, words, characters, message };
             let output;
 
             if (options.json) {
@@ -67,6 +69,7 @@ const analyzeWithPipe = (absolutePath, options) => {
 Lines      : ${lines}
 Words      : ${words}
 Characters : ${characters}
+Message    : ${message}
 `;
             }
 
@@ -90,15 +93,20 @@ Characters : ${characters}
 
         writeStream.on("finish", () => {
             console.log(`✅ Output written to ${outputPath}`);
+            process.exit(0);
         });
 
         writeStream.on("error", (err) => {
             console.error("❌ Write error:", err.message);
+            process.exit(1);
         })
     } else {
         readStream
             .pipe(analyzer)
-            .pipe(process.stdout);
+            .pipe(process.stdout)
+            .on('finish', () => {
+                process.exit(0);
+            })
     }
 }
 

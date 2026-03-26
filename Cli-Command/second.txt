@@ -1,6 +1,0 @@
-
-📄 File Analysis
-----------------
-Lines      : 1
-Words      : 4
-Characters : 15
