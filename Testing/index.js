@@ -1,6 +1,6 @@
 const fs = require('fs');
 const path = require('path');
-
+const { spawn } = require("child_process");
 
 const analyzer = (filepath) => {
     if (!fs.existsSync(filepath)) {
@@ -13,22 +13,25 @@ const analyzer = (filepath) => {
 
     return data;
 }
-function test() {
-    throw new Error("fake function called");
-}
 
-setTimeout(() => {
-    test();
-}, 2000)
+const child = spawn("git", ["log", "--oneline", "-10"]);
+let buffer = "";
+child.stdout.on('data', (chunk) => {
+    buffer += chunk.toString();
+    let lines = buffer.split("\n");
 
-process.on('uncaughtException', (err) => {
-    console.log("uncaughtException ", err.message);
-    process.exit(1);
+    buffer = lines.pop();
+    for (let line of lines) {
+        //if(!line.trim()) continue;
+        const [hash, ...message] = line.split(" ");
+        console.log({ hash, message: message.join(" ") })
+    }
+    //console.log(lines);
 })
 
-process.on('unhandledRejection', (err) => {
-    console.log('unhandledRejection', err.message);
-    process.exit(1);
+child.on("close", (code) => {
+    console.log("Child process exited with code :", code);
 })
+
 
 module.exports = { analyzer }
